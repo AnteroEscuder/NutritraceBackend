@@ -4,10 +4,12 @@ from datetime import date
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User
-from app.schemas.user import UserCreate, UserOut
+from app.schemas.user import UserCreate, UserOut, UserUpdate
 from app.models.meal import Meal
 from app.models.food import Food
 from sqlalchemy import Date
+
+from app.utils.security import get_current_user, hash_password
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -27,6 +29,57 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(db_user)
     return db_user
+
+@router.put("/{user_id}", response_model=UserOut)
+@router.patch("/{user_id}", response_model=UserOut)
+def upate_user(
+    user_id: int,
+    payload: UserUpdate,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    # Solo puede modificar el propio usuario
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="No autorizado")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    
+    if payload.email:
+        exists = db.query(User).filter(User.email == payload.email, User.id != user_id).first()
+        if exists:
+            raise HTTPException(status_code=400, detail="El email ya está en uso")
+        user.email = payload.email
+
+    if payload.name:
+        user.name = payload.name
+
+    if payload.password:
+        user.password_hash = hash_password(payload.password)
+
+    db.commit()
+    db.refresh(user)
+    return user
+
+@router.delete("/{user_id}", status_code=204)
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="No autorizado")
+    
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    
+    db.delete(user)
+    db.commit()
+    # TODO Devolver un json con una info de funciona
+    return
+
 
 @router.get("/{user_id}/summary")
 def get_daily_summary(

@@ -9,6 +9,11 @@ class MealBase(BaseModel):
 class MealCreate(MealBase):
     pass
 
+class MealUpdate(BaseModel):
+    food_id: int
+    quantity: float
+    date: date
+
 class MealOut(MealBase):
     id: int
     user_id: int

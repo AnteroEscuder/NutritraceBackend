@@ -5,9 +5,11 @@ from app.database import get_db
 from app.models.meal import Meal
 from app.models.user import User
 from app.models.food import Food
-from app.schemas.meal import MealCreate, MealOut, MealSummary
+from app.schemas.meal import MealCreate, MealOut, MealSummary, MealUpdate
 from typing import List, Optional
 from datetime import date
+
+from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/meals", tags=["Meals"])
 
@@ -88,6 +90,58 @@ def get_meals(
     meals = query.all()
     return [factorConversion(meal, food=meal.food) for meal in meals]
 
+@router.put("/{meal_id}", response_model=MealOut)
+@router.patch("/{meal_id}", response_model=MealOut)
+def update_meal(
+    meal_id: int,
+    payload: MealUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    meal = db.query(Meal).filter(Meal.id == meal_id).first()
+    if not meal:
+        raise HTTPException(status_code=404, detail="Comida no encontrada")
+
+    # Solo el dueño puede modificar
+    if meal.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="No autorizado")
+
+    if payload.food_id is not None:
+        food = db.query(Food).filter(Food.id == payload.food_id).first()
+        if not food:
+            raise HTTPException(status_code=404, detail="Alimento no encontrado")
+        meal.food_id = payload.food_id
+
+    if payload.quantity is not None:
+        if payload.quantity <= 0:
+            raise HTTPException(status_code=400, detail="La cantidad debe ser > 0")
+        meal.quantity = payload.quantity
+
+    if payload.date is not None:
+        meal.date = payload.date
+
+    db.commit()
+    db.refresh(meal)
+    return factorConversion(meal)
+
+@router.delete("/{meal_id}", status_code=204)
+def delete_meal(
+    meal_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    meal = db.query(Meal).filter(Meal.id == meal_id).first()
+    if not meal:
+        raise HTTPException(status_code=404, detail="Comida no encontrada")
+
+    if meal.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="No autorizado")
+
+    db.delete(meal)
+    db.commit()
+    # TODO valorar si quitarla al devovlerla o no
+    return meal
+
 
 def factorConversion(meal, food=None, db_meal=None):
 
@@ -107,3 +161,4 @@ def factorConversion(meal, food=None, db_meal=None):
         "fat": food.fat * factor,
         "food_name": food.name
     }
+
