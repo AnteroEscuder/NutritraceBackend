@@ -1,3 +1,4 @@
+from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi import Query
 from datetime import date
@@ -17,18 +18,7 @@ router = APIRouter(prefix="/users", tags=["Users"])
 def list_users(db: Session = Depends(get_db)):
     return db.query(User).all()
 
-# TODO tenemos que cifrar contraseñas
-@router.post("/", response_model=UserOut)
-def create_user(user: UserCreate, db: Session = Depends(get_db)):
-    existing_user = db.query(User).filter(User.email == user.email).first()
-    if  existing_user:
-        raise HTTPException(status_code=400, detail="El email ya está registrado")
-    
-    db_user = User(name=user.name, email=user.email, password = user.password)
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    return db_user
+
 
 @router.put("/{user_id}", response_model=UserOut)
 @router.patch("/{user_id}", response_model=UserOut)
@@ -80,6 +70,28 @@ def delete_user(
     # TODO Devolver un json con una info de funciona
     return
 
+
+def ensure_admin(current_user: User):
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permisos para realizar esta operación",
+        )
+
+
+@router.get("/", response_model=List[UserOut])
+def list_users(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    ensure_admin(current_user)
+    users = db.query(User).all()
+    return users
+
+
+@router.get("/me", response_model=UserOut)
+def get_me(current_user: User = Depends(get_current_user)):
+    return current_user
 
 @router.get("/{user_id}/summary")
 def get_daily_summary(
@@ -143,7 +155,6 @@ def get_daily_summary2(
     date_param: date = Query(..., alias="date"),
     db: Session = Depends(get_db)
 ):
-    # Obtener comidas del usuario en esa fecha
     meals = (
         db.query(Meal)
         .filter(Meal.user_id == user_id)
@@ -151,7 +162,6 @@ def get_daily_summary2(
         .all()
     )
 
-    # Si no hay comidas, devolver resumen vacío
     if not meals:
         return {
             "date": date_param,
@@ -164,7 +174,6 @@ def get_daily_summary2(
             "message": "No se han registrado comidas ese día"
         }
 
-    # Calcular totales
     total_calories = 0
     total_protein = 0
     total_carbs = 0
@@ -173,7 +182,7 @@ def get_daily_summary2(
 
     for meal in meals:
         food = meal.food
-        q = meal.quantity / 100  # por cada 100g
+        q = meal.quantity / 100 
 
         total_calories += food.calories * q
         total_protein += food.protein * q

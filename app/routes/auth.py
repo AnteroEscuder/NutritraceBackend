@@ -1,38 +1,61 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
+
 from app.database import get_db
 from app.models.user import User
 from app.schemas.user import UserCreate, UserOut
-from app.utils.security import hash_password, verify_password, create_access_token, get_current_user
+from app.schemas.auth import Token
+from app.utils.security import (
+    get_password_hash,
+    verify_password,
+    create_access_token,
+    get_current_user,
+)
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
-@router.post("/register", response_model=UserOut)
+
+@router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 def register(user: UserCreate, db: Session = Depends(get_db)):
     existing_user = db.query(User).filter(User.email == user.email).first()
-    if  existing_user:
-        raise HTTPException(status_code=400, detail="El email ya está registrado")
-    
-    new_user = User(
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El email ya está registrado",
+        )
+
+    hashed_password = get_password_hash(user.password)
+    db_user = User(
         name=user.name,
         email=user.email,
-        password_hash=hash_password(user.password)
+        password_hash=hashed_password,
+        role=getattr(user, "role", "user"),
     )
-    db.add(new_user)
+
+    db.add(db_user)
     db.commit()
-    db.refresh(new_user)
-    return new_user
+    db.refresh(db_user)
+
+    return db_user
 
 
-@router.post("/login")
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+@router.post("/login", response_model=Token)
+def login(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db),
+):
     user = db.query(User).filter(User.email == form_data.username).first()
     if not user or not verify_password(form_data.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Credenciales inválidas")
-    
-    token = create_access_token({"sub": str(user.id)})
-    return {"access_token": token, "token_type": "bearer"}
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Credenciales incorrectas",
+        )
+
+    access_token = create_access_token({"sub": str(user.id)})
+    return Token(access_token=access_token, token_type="bearer")
+
+
 
 @router.get("/me")
 def get_me(current_user: User = Depends(get_current_user)):
