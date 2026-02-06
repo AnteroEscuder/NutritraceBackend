@@ -67,7 +67,6 @@ def delete_user(
     
     db.delete(user)
     db.commit()
-    # TODO Devolver un json con una info de funciona
     return
 
 

@@ -8,7 +8,7 @@ from app.database import get_db
 from app.models.user import User
 from app.models.food import Food
 from app.models.meal import Meal
-from app.schemas.meal import MealCreate, MealOut
+from app.schemas.meal import MealCreate, MealOut, MealUpdate
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/meals", tags=["Meals"])
@@ -20,13 +20,9 @@ def create_meal(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Verificar que el alimento existe
     food = db.query(Food).filter(Food.id == meal.food_id).first()
     if not food:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Alimento no encontrado",
-        )
+        raise HTTPException(status_code=404, detail="Alimento no encontrado")
 
     db_meal = Meal(
         user_id=current_user.id,
@@ -34,12 +30,24 @@ def create_meal(
         quantity=meal.quantity,
         date=meal.date or date.today(),
     )
-
     db.add(db_meal)
     db.commit()
     db.refresh(db_meal)
-    return db_meal
 
+    factor = (db_meal.quantity or 0) / 100.0
+
+    return {
+        "id": db_meal.id,
+        "user_id": db_meal.user_id,
+        "food_id": db_meal.food_id,
+        "quantity": db_meal.quantity,
+        "date": db_meal.date,
+        "food_name": food.name,
+        "calories": (food.calories or 0) * factor,
+        "protein": (food.protein or 0) * factor,
+        "carbs": (food.carbs or 0) * factor,
+        "fat": (food.fat or 0) * factor,
+    }
 
 @router.get("/", response_model=List[MealOut])
 def list_meals(
@@ -47,16 +55,36 @@ def list_meals(
     current_user: User = Depends(get_current_user),
     day: Optional[date] = Query(None, description="Filtrar por fecha"),
 ):
-    query = db.query(Meal).filter(Meal.user_id == current_user.id)
+    q = db.query(Meal, Food).join(Food, Food.id == Meal.food_id).filter(Meal.user_id == current_user.id)
+
     if day:
-        query = query.filter(Meal.date == day)
-    return query.all()
+        q = q.filter(Meal.date == day)
+
+    rows = q.all()
+
+    out = []
+    for meal, food in rows:
+        factor = (meal.quantity or 0) / 100.0
+        out.append({
+            "id": meal.id,
+            "user_id": meal.user_id,
+            "food_id": meal.food_id,
+            "quantity": meal.quantity,
+            "date": meal.date,
+            "food_name": food.name,
+            "calories": (food.calories or 0) * factor,
+            "protein": (food.protein or 0) * factor,
+            "carbs": (food.carbs or 0) * factor,
+            "fat": (food.fat or 0) * factor,
+        })
+
+    return out
 
 
 @router.put("/{meal_id}", response_model=MealOut)
 def update_meal(
     meal_id: int,
-    meal: MealCreate,
+    meal: MealUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -84,7 +112,27 @@ def update_meal(
 
     db.commit()
     db.refresh(db_meal)
-    return db_meal
+
+    # Obtener el alimento actualizado para nombre/macros
+    food = db.query(Food).filter(Food.id == db_meal.food_id).first()
+    if not food:
+        # no debería pasar, pero por seguridad
+        raise HTTPException(status_code=404, detail="Alimento no encontrado")
+
+    factor = (db_meal.quantity or 0) / 100.0
+
+    return {
+        "id": db_meal.id,
+        "user_id": db_meal.user_id,
+        "food_id": db_meal.food_id,
+        "quantity": db_meal.quantity,
+        "date": db_meal.date,
+        "food_name": food.name,
+        "calories": (food.calories or 0) * factor,
+        "protein": (food.protein or 0) * factor,
+        "carbs": (food.carbs or 0) * factor,
+        "fat": (food.fat or 0) * factor,
+    }
 
 
 @router.delete("/{meal_id}", status_code=status.HTTP_204_NO_CONTENT)

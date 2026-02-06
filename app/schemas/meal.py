@@ -1,20 +1,19 @@
-from pydantic import BaseModel
-from datetime import date
+from pydantic import BaseModel, ConfigDict
+import datetime as dt
 
-class MealBase(BaseModel):
-    user_id: int
+class MealCreate(BaseModel):
     food_id: int
     quantity: float
-
-class MealCreate(MealBase):
-    pass
+    date: dt.date | None = None
 
 class MealUpdate(BaseModel):
     food_id: int
     quantity: float
-    date: date
+    date: dt.date | None = None
 
-class MealOut(MealBase):
+class MealOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     user_id: int
     food_id: int
@@ -24,13 +23,4 @@ class MealOut(MealBase):
     carbs: float
     fat: float
     food_name: str
-
-    class Config:
-        orm_mode = True
-
-class MealSummary(BaseModel):
-    date: date
-    calories: float
-    protein: float
-    carbs: float
-    fat: float
+    date: dt.date
