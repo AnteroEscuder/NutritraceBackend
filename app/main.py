@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.routes import auth, users, foods, meals, goals, allergens, profile
+from app.routes import auth, users, foods, meals, goals, allergens, profile, community
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
@@ -23,3 +23,4 @@ app.include_router(goals.router)
 app.include_router(auth.router)
 app.include_router(allergens.router)
 app.include_router(profile.router)
+app.include_router(community.router)
