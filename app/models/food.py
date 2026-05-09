@@ -15,3 +15,9 @@ class Food(Base):
 
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     user = relationship("User", backref="foods")
+
+    allergens = relationship(
+        "Allergen",
+        secondary="food_allergens",
+        backref="foods",
+    )

@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from app.routes import auth, users, foods, meals, goals, allergens, profile, community
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+import os
 
 app = FastAPI(
     # title="NutriTrace API",
@@ -15,6 +17,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+os.makedirs("static/profile_photos", exist_ok=True)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 app.include_router(users.router)
 app.include_router(foods.router)

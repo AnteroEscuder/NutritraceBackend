@@ -12,8 +12,13 @@ class UserUpdate(BaseModel):
     email: EmailStr
     password: str
 
+class UserProfileUpdate(BaseModel):
+    name: str
+    email: EmailStr
+
 class UserOut(UserBase):
     id: int
+    profile_image_url: str | None = None
 
     class Config:
-        orm_model = True
+        from_attributes = True

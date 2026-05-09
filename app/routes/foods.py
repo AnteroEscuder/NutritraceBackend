@@ -1,13 +1,15 @@
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.models.user import User
 from app.models.food import Food
 from app.schemas.food import FoodCreate, FoodOut
 from app.utils.security import get_current_user
+from app.models.allergen import Allergen
+from app.models.food_allergen import FoodAllergen
 
 router = APIRouter(prefix="/foods", tags=["Foods"])
 
@@ -22,7 +24,11 @@ def list_foods(
     Lista los alimentos del USUARIO ACTUAL.
     Cada usuario solo ve los suyos.
     """
-    query = db.query(Food).filter(Food.user_id == current_user.id)
+    query = (
+        db.query(Food)
+        .options(selectinload(Food.allergens))
+        .filter(Food.user_id == current_user.id)
+    )
 
     if search:
         query = query.filter(Food.name.ilike(f"%{search}%"))
@@ -41,6 +47,7 @@ def get_food(
     """
     food = (
         db.query(Food)
+        .options(selectinload(Food.allergens))
         .filter(Food.id == food_id, Food.user_id == current_user.id)
         .first()
     )
@@ -82,6 +89,11 @@ def create_food(
         fat=food.fat,
         user_id=current_user.id,
     )
+
+    if food.allergen_ids:
+        allergens = db.query(Allergen).filter(Allergen.id.in_(food.allergen_ids)).all()
+        db_food.allergens = allergens
+
     db.add(db_food)
     db.commit()
     db.refresh(db_food)
@@ -129,10 +141,15 @@ def update_food(
     db_food.carbs = food.carbs
     db_food.fat = food.fat
 
+    allergens = []
+    if food.allergen_ids:
+        allergens = db.query(Allergen).filter(Allergen.id.in_(food.allergen_ids)).all()
+
+    db_food.allergens = allergens
+
     db.commit()
     db.refresh(db_food)
     return db_food
-
 
 @router.delete("/{food_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_food(

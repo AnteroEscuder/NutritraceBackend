@@ -58,7 +58,18 @@ def get_messages(
         q = q.filter(CommunityMessage.id < before_id)
 
     rows = q.order_by(desc(CommunityMessage.id)).limit(limit).all()
-    return list(reversed(rows))
+    return [
+        {
+            "id": m.id,
+            "room_id": m.room_id,
+            "user_id": m.user_id,
+            "user_name": m.user_name,
+            "text": m.text,
+            "created_at": m.created_at,
+            "user_profile_image_url": m.user.profile_image_url if m.user else None,
+        }
+        for m in reversed(rows)
+    ]
 
 
 def get_token_from_ws(websocket: WebSocket) -> Optional[str]:
@@ -150,6 +161,7 @@ async def community_ws(websocket: WebSocket, db: Session = Depends(get_db)):
                     "user_id": m.user_id,
                     "user_name": m.user_name,
                     "text": m.text,
+                    "user_profile_image_url": user.profile_image_url,
                     "created_at": m.created_at.isoformat() if m.created_at else None,
                 }
                 await broadcast(room_id, "message_created", payload)

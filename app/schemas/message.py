@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
+from typing import Optional
 
 
 class CommunityMessageOut(BaseModel):
@@ -9,6 +10,7 @@ class CommunityMessageOut(BaseModel):
     user_name: str
     text: str
     created_at: datetime
+    user_profile_image_url: Optional[str] = None
 
     class Config:
         from_attributes = True  # Pydantic v2
