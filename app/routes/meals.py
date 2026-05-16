@@ -2,6 +2,7 @@ from datetime import date
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -14,13 +15,23 @@ from app.utils.security import get_current_user
 router = APIRouter(prefix="/meals", tags=["Meals"])
 
 
+def get_accessible_food(db: Session, food_id: int, current_user: User):
+    return db.query(Food).filter(
+        Food.id == food_id,
+        or_(
+            Food.is_system.is_(True),
+            Food.user_id == current_user.id,
+        ),
+    ).first()
+
+
 @router.post("/", response_model=MealOut, status_code=status.HTTP_201_CREATED)
 def create_meal(
     meal: MealCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    food = db.query(Food).filter(Food.id == meal.food_id).first()
+    food = get_accessible_food(db, meal.food_id, current_user)
     if not food:
         raise HTTPException(status_code=404, detail="Alimento no encontrado")
 
@@ -99,7 +110,7 @@ def update_meal(
 
     # Si se cambia el alimento, comprobar que existe
     if meal.food_id != db_meal.food_id:
-        food = db.query(Food).filter(Food.id == meal.food_id).first()
+        food = get_accessible_food(db, meal.food_id, current_user)
         if not food:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -114,7 +125,7 @@ def update_meal(
     db.refresh(db_meal)
 
     # Obtener el alimento actualizado para nombre/macros
-    food = db.query(Food).filter(Food.id == db_meal.food_id).first()
+    food = get_accessible_food(db, db_meal.food_id, current_user)
     if not food:
         # no debería pasar, pero por seguridad
         raise HTTPException(status_code=404, detail="Alimento no encontrado")

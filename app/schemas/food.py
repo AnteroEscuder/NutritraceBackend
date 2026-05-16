@@ -22,4 +22,5 @@ class FoodOut(BaseModel):
     protein: float
     carbs: float
     fat: float
+    is_system: bool = False
     allergens: List[AllergenOut] = []

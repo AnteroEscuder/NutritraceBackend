@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey
+from sqlalchemy import Boolean, Column, Integer, String, Float, ForeignKey
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -13,7 +13,8 @@ class Food(Base):
     carbs = Column(Float, nullable=False)
     fat = Column(Float, nullable=False)
 
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    is_system = Column(Boolean, nullable=False, default=False, server_default="false")
     user = relationship("User", backref="foods")
 
     allergens = relationship(

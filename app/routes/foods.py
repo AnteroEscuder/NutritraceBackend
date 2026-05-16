@@ -1,6 +1,7 @@
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
@@ -9,9 +10,18 @@ from app.models.food import Food
 from app.schemas.food import FoodCreate, FoodOut
 from app.utils.security import get_current_user
 from app.models.allergen import Allergen
-from app.models.food_allergen import FoodAllergen
+from app.models.food_allergen import FoodAllergen  # noqa: F401
 
 router = APIRouter(prefix="/foods", tags=["Foods"])
+
+
+def accessible_food_query(db: Session, current_user: User):
+    return db.query(Food).filter(
+        or_(
+            Food.is_system.is_(True),
+            Food.user_id == current_user.id,
+        )
+    )
 
 
 @router.get("/", response_model=List[FoodOut])
@@ -21,19 +31,17 @@ def list_foods(
     search: Optional[str] = Query(None, description="Buscar por nombre"),
 ):
     """
-    Lista los alimentos del USUARIO ACTUAL.
-    Cada usuario solo ve los suyos.
+    Lista alimentos de la app y alimentos propios del usuario actual.
     """
     query = (
-        db.query(Food)
+        accessible_food_query(db, current_user)
         .options(selectinload(Food.allergens))
-        .filter(Food.user_id == current_user.id)
     )
 
     if search:
         query = query.filter(Food.name.ilike(f"%{search}%"))
 
-    return query.all()
+    return query.order_by(Food.is_system.desc(), Food.name.asc()).all()
 
 
 @router.get("/{food_id}", response_model=FoodOut)
@@ -43,12 +51,12 @@ def get_food(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Devuelve un alimento del usuario actual.
+    Devuelve un alimento de la app o del usuario actual.
     """
     food = (
-        db.query(Food)
+        accessible_food_query(db, current_user)
         .options(selectinload(Food.allergens))
-        .filter(Food.id == food_id, Food.user_id == current_user.id)
+        .filter(Food.id == food_id)
         .first()
     )
     if not food:
@@ -88,6 +96,7 @@ def create_food(
         carbs=food.carbs,
         fat=food.fat,
         user_id=current_user.id,
+        is_system=False,
     )
 
     if food.allergen_ids:
@@ -109,7 +118,7 @@ def update_food(
 ):
     """
     Actualiza un alimento del usuario.
-    No puedes editar alimentos de otro usuario.
+    No puedes editar alimentos de la app ni de otro usuario.
     """
     db_food = (
         db.query(Food)
@@ -159,7 +168,7 @@ def delete_food(
 ):
     """
     Borra un alimento del usuario.
-    No puedes borrar alimentos de otro.
+    No puedes borrar alimentos de la app ni de otro usuario.
     """
     db_food = (
         db.query(Food)
