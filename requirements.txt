@@ -15,20 +15,7 @@ email-validator
 psycopg2-binary
 
 python-multipart
-fastapi
-uvicorn[standard]
 
-SQLAlchemy
-alembic
-
-python-dotenv
-
-python-jose[cryptography]
-passlib[bcrypt]
-
-pydantic
-email-validator
-
-psycopg2-binary
-
-python-multipart
+# Testing
+pytest
+httpx

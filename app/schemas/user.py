@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr
 
 class UserBase(BaseModel):
     name: str
@@ -17,8 +17,7 @@ class UserProfileUpdate(BaseModel):
     email: EmailStr
 
 class UserOut(UserBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     profile_image_url: str | None = None
-
-    class Config:
-        from_attributes = True

@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import List
 from app.schemas.allergen import AllergenOut
 
@@ -14,6 +14,8 @@ class FoodCreate(FoodBase):
     pass
 
 class FoodOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     name: str
     calories: float
@@ -21,6 +23,3 @@ class FoodOut(BaseModel):
     carbs: float
     fat: float
     allergens: List[AllergenOut] = []
-
-    class Config:
-        from_attributes = True

@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 class GoalBase(BaseModel):
     calories: int
@@ -10,7 +10,6 @@ class GoalCreate(GoalBase):
     pass
 
 class GoalOut(GoalBase):
-    user_id: int
+    model_config = ConfigDict(from_attributes=True)
 
-    class Config:
-        orm_mode = True
+    user_id: int
