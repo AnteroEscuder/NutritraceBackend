@@ -1,7 +1,8 @@
 from app.database import SessionLocal
 from app.models.food import Food
 from app.models.user import User  # noqa: F401
-
+from app.models.allergen import Allergen  # noqa: F401
+from app.models.food_allergen import FoodAllergen  # noqa: F401
 
 DEFAULT_SYSTEM_FOODS = [
     {"name": "Arroz blanco cocido", "calories": 130.0, "protein": 2.7, "carbs": 28.0, "fat": 0.3},

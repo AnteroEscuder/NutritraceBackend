@@ -59,7 +59,7 @@ pip install -r requirements.txt
 Crear archivo `.env`:
 
 ```bash
-DATABASE_URL=postgresql+psycopg2://nutribase:nutripass@localhost:5432/nutridb
+DATABASE_URL=postgresql+psycopg2://root:1234@localhost:5432/nutritrace
 JWT_SECRET=cambiar_este_secret
 CORS_ORIGINS=http://localhost:5173
 ```
@@ -85,16 +85,215 @@ Incluye pruebas de autenticación, endpoints y validaciones.
 
 ---
 
-## 🐳 Despliegue con Docker (entorno completo)
+## 🐳 Despliegue completo con Docker
+
+Esta opción levanta todo lo necesario para ejecutar la API:
+
+* Backend FastAPI en `http://localhost:8000`
+* PostgreSQL 15 en `localhost:5432`
+* Volumen persistente para conservar los datos
+* Variables de entorno para conectar la API con la base de datos
+
+### 1️⃣ Requisitos
+
+Tener instalados:
+
+* Docker
+* Docker Compose
+
+Comprobar instalación:
 
 ```bash
-docker compose up --build
+docker --version
+docker compose version
 ```
 
-Esto levanta:
+### 2️⃣ Variables de entorno
 
-* Backend en `http://localhost:8000`
-* Base de datos PostgreSQL
+Crear un archivo `.env` en la raíz del proyecto:
+
+```bash
+DATABASE_URL=postgresql+psycopg2://root:1234@db:5432/nutritrace
+JWT_SECRET=cambiar_este_secret_por_uno_seguro
+CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+```
+
+> Dentro de Docker se usa el host `db`, porque es el nombre del servicio de PostgreSQL en Docker Compose.
+
+Para que Alembic ejecute migraciones dentro de Docker, revisa también `alembic.ini` y usa la misma base de datos con el host `db`:
+
+```ini
+sqlalchemy.url = postgresql://root:1234@db:5432/nutritrace
+```
+
+Si vas a ejecutar Alembic fuera de Docker, cambia temporalmente el host a `localhost`:
+
+```ini
+sqlalchemy.url = postgresql://root:1234@localhost:5432/nutritrace
+```
+
+### 3️⃣ Dockerfile del backend
+
+El backend necesita un `Dockerfile` en la raíz del proyecto. Si no existe, créalo con este contenido:
+
+```dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+EXPOSE 8000
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+### 4️⃣ Docker Compose completo
+
+Para desplegar backend + base de datos, `docker-compose.yml` debe incluir ambos servicios:
+
+```yaml
+version: "3.8"
+
+services:
+  db:
+    image: postgres:15
+    container_name: nutritrace_db
+    restart: always
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: 1234
+      POSTGRES_DB: nutritrace
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root -d nutritrace"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: .
+    container_name: nutritrace_backend
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./static:/app/static
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+```
+
+### 5️⃣ Levantar el entorno
+
+Construir las imágenes y arrancar los contenedores:
+
+```bash
+docker compose up -d --build
+```
+
+Ver contenedores activos:
+
+```bash
+docker compose ps
+```
+
+Ver logs del backend:
+
+```bash
+docker compose logs -f backend
+```
+
+La documentación interactiva queda disponible en:
+
+👉 [http://localhost:8000/docs](http://localhost:8000/docs)
+
+### 6️⃣ Crear tablas y cargar datos iniciales
+
+Ejecutar migraciones de Alembic dentro del contenedor:
+
+```bash
+docker compose exec backend alembic upgrade head
+```
+
+Cargar alérgenos iniciales:
+
+```bash
+docker compose exec backend python scripts/seed_allergens.py
+```
+
+Cargar alimentos del sistema:
+
+```bash
+docker compose exec backend python scripts/seed_system_foods.py
+```
+
+### 7️⃣ Comandos útiles
+
+Parar los contenedores sin borrar datos:
+
+```bash
+docker compose down
+```
+
+Parar y borrar también el volumen de PostgreSQL:
+
+```bash
+docker compose down -v
+```
+
+Reconstruir el backend después de cambiar dependencias:
+
+```bash
+docker compose up -d --build backend
+```
+
+Entrar en una shell del contenedor:
+
+```bash
+docker compose exec backend bash
+```
+
+Ejecutar tests dentro de Docker:
+
+```bash
+docker compose exec backend pytest -v
+```
+
+### 8️⃣ Problemas frecuentes
+
+Si el backend no conecta con PostgreSQL, revisa que `DATABASE_URL` use `db` como host:
+
+```bash
+DATABASE_URL=postgresql+psycopg2://root:1234@db:5432/nutritrace
+```
+
+Si el puerto `5432` ya está ocupado en tu máquina, cambia el puerto publicado de PostgreSQL:
+
+```yaml
+ports:
+  - "5433:5432"
+```
+
+No cambies `db:5432` dentro de `DATABASE_URL`, porque esa conexión ocurre dentro de la red interna de Docker.
 
 ---
 
@@ -107,7 +306,7 @@ Para producción se recomienda usar **Docker + Nginx + HTTPS**.
 Crear `.env.prod`:
 
 ```bash
-DATABASE_URL=postgresql+psycopg2://nutribase:password_seguro@db:5432/nutridb
+DATABASE_URL=postgresql+psycopg2://root:password_seguro@db:5432/nutritrace
 JWT_SECRET=secret_largo_y_seguro
 CORS_ORIGINS=https://tudominio.com
 ENV=production
